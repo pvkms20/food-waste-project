@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Verify blockchain{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Blockchain verification</h1>
+<div class="card mb-4 border-{{ 'success' if verdict.valid else 'danger' }} border-2"><div class="card-body">
+  <div class="display-6 fw-semibold text-{{ 'success' if verdict.valid else 'danger' }}">
+    {{ 'Blockchain Valid' if verdict.valid else 'Blockchain Tampered' }}</div>
+  <p class="mb-0 mt-2">{{ verdict.message }}</p>
+</div></div>
+
+<div class="card mb-4"><div class="card-body">
+  <h2 class="h5 mb-3">How each block was checked</h2>
+  <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+    <thead><tr><th>Block</th><th>Hash matches contents</th><th>Linked to previous block</th></tr></thead>
+    <tbody>{% for r in verdict.blocks %}
+      <tr><td>#{{ r.index }}</td>
+        <td><span class="badge text-bg-{{ 'success' if r.hash_ok else 'danger' }}">{{ 'Yes' if r.hash_ok else 'No' }}</span></td>
+        <td><span class="badge text-bg-{{ 'success' if r.link_ok else 'danger' }}">{{ 'Yes' if r.link_ok else 'No' }}</span></td></tr>
+    {% endfor %}</tbody></table></div>
+</div></div>
+
+<div class="d-flex flex-wrap gap-2">
+  <a class="btn btn-outline-success" href="{{ url_for('chain_view') }}">View blockchain</a>
+  {% if not verdict.valid %}
+  <form method="post" action="{{ url_for('restore') }}"><button class="btn btn-outline-primary">Restore original (undo demo tamper)</button></form>
+  {% endif %}
+</div>
+<p class="text-muted small mt-3 mb-0">A block is valid when its SHA-256 hash is recomputed from its contents and matches the stored hash,
+  and its previous_hash equals the hash of the block before it.</p>
+{% endblock %}

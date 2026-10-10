@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Donations{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Donations</h1>
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card"><div class="card-body">
+      <h2 class="h5 mb-3">Register a donation</h2>
+      <form method="post" action="{{ url_for('donate') }}">
+        <div class="mb-3"><label class="form-label" for="donor">Donor</label>
+          <input id="donor" name="donor" maxlength="80" class="form-control" placeholder="Hostel mess, canteen..." value="{{ form.get('donor', '') }}" required></div>
+        <div class="mb-3"><label class="form-label" for="food_type">Food type</label>
+          <select id="food_type" name="food_type" class="form-select">
+            {% for f in food_types %}<option {% if form.get('food_type') == f %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></div>
+        <div class="mb-3"><label class="form-label" for="quantity_kg">Quantity (kg)</label>
+          <input id="quantity_kg" name="quantity_kg" type="number" step="0.1" min="0.1" class="form-control" value="{{ form.get('quantity_kg', '') }}" required></div>
+        <div class="mb-3"><label class="form-label" for="expiry_time">Expiry time</label>
+          <input id="expiry_time" name="expiry_time" type="datetime-local" class="form-control" value="{{ form.get('expiry_time', '') }}" required>
+          <div class="form-text">Must be at least 3 hours from now.</div></div>
+        <div class="mb-3"><label class="form-label" for="ngo">Receiver NGO</label>
+          <select id="ngo" name="ngo" class="form-select">
+            <option value="auto">Auto-match (smallest NGO that fits)</option>
+            {% for n in ngos %}<option value="{{ n.name }}" {% if form.get('ngo') == n.name %}selected{% endif %}>{{ n.name }} ({{ n.location }}, up to {{ n.capacity|int }} kg)</option>{% endfor %}
+          </select></div>
+        <button class="btn btn-success w-100">Save and record on blockchain</button>
+      </form>
+    </div></div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card"><div class="card-body">
+      <h2 class="h5 mb-3">All donations</h2>
+      {% if donations %}
+      <div class="table-responsive"><table class="table align-middle">
+        <thead><tr><th>ID</th><th>Donor</th><th>Food</th><th>Kg</th><th>NGO</th><th>Status</th><th></th></tr></thead>
+        <tbody>{% for d in donations %}
+          <tr>
+            <td><a href="{{ url_for('donation_detail', code=d.donation_code) }}">{{ d.donation_code }}</a></td>
+            <td>{{ d.donor }}</td><td>{{ d.food_type }}</td><td>{{ d.quantity }}</td><td>{{ d.ngo }}</td>
+            <td><span class="badge text-bg-{{ 'success' if d.status == 'Delivered' else 'info' if d.status == 'Picked Up' else 'secondary' }}">{{ d.status }}</span></td>
+            <td>{% if flow.get(d.status) %}
+              <form method="post" action="{{ url_for('update_status', code=d.donation_code) }}">
+                <button class="btn btn-sm btn-outline-success">Mark {{ flow[d.status] }}</button></form>{% endif %}</td>
+          </tr>{% endfor %}</tbody></table></div>
+      {% else %}<p class="text-muted mb-0">No donations yet. Register one using the form.</p>{% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ donation.donation_code }}{% endblock %}
+{% block content %}
+<h1 class="h3 mb-4">Donation {{ donation.donation_code }}</h1>
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card text-center"><div class="card-body">
+      {% if qr_available %}
+        <img src="{{ url_for('qr_image', code=donation.donation_code) }}" class="img-fluid my-2" style="max-width:200px" alt="QR code for this donation">
+        <div class="small text-muted mb-3">Scan to open this traceability page</div>
+      {% else %}
+        <div class="small text-muted mb-3">QR codes are unavailable (qrcode package not installed).</div>
+      {% endif %}
+      <div class="alert alert-{{ 'success' if verdict.valid else 'danger' }} small mb-0 text-start">
+        <strong>{{ 'Blockchain valid' if verdict.valid else 'Blockchain tampered' }}.</strong> {{ verdict.message }}</div>
+    </div></div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card mb-4"><div class="card-body">
+      <h2 class="h5 mb-3">Details</h2>
+      <table class="table table-sm mb-3">
+        <tr><th scope="row">Donor</th><td>{{ donation.donor }}</td></tr>
+        <tr><th scope="row">Food type</th><td>{{ donation.food_type }}</td></tr>
+        <tr><th scope="row">Quantity</th><td>{{ donation.quantity }} kg</td></tr>
+        <tr><th scope="row">Expiry</th><td>{{ donation.expiry }}</td></tr>
+        <tr><th scope="row">Receiver NGO</th><td>{{ donation.ngo }}</td></tr>
+        <tr><th scope="row">Status</th><td><strong>{{ donation.status }}</strong></td></tr>
+      </table>
+      {% if flow.get(donation.status) %}
+      <form method="post" action="{{ url_for('update_status', code=donation.donation_code) }}">
+        <button class="btn btn-success">Mark {{ flow[donation.status] }}</button></form>{% endif %}
+    </div></div>
+    <div class="card"><div class="card-body">
+      <h2 class="h5 mb-3">Traceability trail (from the blockchain)</h2>
+      {% for b in history %}
+        <div class="trail-item">
+          <div><strong>{{ b.data.status }}</strong> <span class="text-muted small">Block #{{ b.index }} &middot; {{ b.timestamp }}</span></div>
+          <div class="hash">hash: {{ b.hash }}</div>
+          <div class="hash text-muted">previous: {{ b.previous_hash }}</div>
+        </div>
+      {% else %}<p class="text-muted mb-0">No blocks found for this donation.</p>{% endfor %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}

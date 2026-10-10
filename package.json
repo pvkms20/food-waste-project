@@ -1,0 +1,12 @@
+{
+  "name": "food-waste-donation-trace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ML food waste prediction and blockchain donation traceability (Flask + scikit-learn)",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node scripts/py.js -m pytest -q",
+    "start": "node scripts/py.js app.py",
+    "install:py": "node scripts/py.js -m pip install -r requirements.txt"
+  }
+}

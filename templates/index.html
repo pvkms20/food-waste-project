@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not bundle %}
+  <div class="alert alert-warning">The prediction model has not been trained yet. Run
+    <code>python train_model.py</code> and restart the app.</div>
+{% endif %}
+
+<div class="mb-4">
+  <h1 class="h3 mb-1">Food Waste Prediction &amp; Donation Traceability</h1>
+  <p class="text-muted mb-0">Predict surplus food, decide whether to donate, and track every donation on a tamper-evident chain.</p>
+</div>
+
+<!-- summary cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Predicted waste</div><div class="stat-value" id="card-waste">&ndash;</div></div></div></div>
+  <div class="col-6 col-lg">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Waste risk</div><div class="stat-value" id="card-risk">&ndash;</div></div></div></div>
+  <div class="col-6 col-lg">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Recommendation</div><div class="stat-value" id="card-decision">&ndash;</div></div></div></div>
+  <div class="col-6 col-lg">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Total donations</div>
+      <div class="stat-value">{{ stats.donations }}</div>
+      <div class="small text-muted">{{ stats.donated_kg }} kg donated, {{ stats.delivered_kg }} kg delivered</div></div></div></div>
+  <div class="col-12 col-lg">
+    <a class="text-decoration-none" href="{{ url_for('verify') }}">
+    <div class="card stat-card h-100"><div class="card-body">
+      <div class="stat-label">Blockchain status</div>
+      <div class="stat-value {{ 'text-success' if verdict.valid else 'text-danger' }}">{{ 'Valid' if verdict.valid else 'Tampered' }}</div>
+      <div class="small text-muted">{{ verdict.blocks|length }} block{{ '' if verdict.blocks|length == 1 else 's' }}</div></div></div></a></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-6">
+    <div class="card h-100"><div class="card-body">
+      <h2 class="h5 mb-3">Predict food waste</h2>
+      <form id="predict-form" class="row g-3" novalidate>
+        <div class="col-sm-6"><label class="form-label" for="meals_served">Meals served</label>
+          <input id="meals_served" name="meals_served" type="number" min="1" step="1" class="form-control" value="300" required></div>
+        <div class="col-sm-6"><label class="form-label" for="food_prepared_kg">Food prepared (kg)</label>
+          <input id="food_prepared_kg" name="food_prepared_kg" type="number" min="0.1" step="0.1" class="form-control" value="125" required></div>
+        <div class="col-sm-6"><label class="form-label" for="kitchen_staff">Kitchen staff</label>
+          <input id="kitchen_staff" name="kitchen_staff" type="number" min="1" step="1" class="form-control" value="8" required></div>
+        <div class="col-sm-6"><label class="form-label" for="day_of_week">Day of week</label>
+          <select id="day_of_week" name="day_of_week" class="form-select">
+            {% for d in days %}<option value="{{ loop.index0 }}">{{ d }}</option>{% endfor %}</select></div>
+        <div class="col-sm-6"><label class="form-label" for="temperature">Temperature (&deg;C)</label>
+          <input id="temperature" name="temperature" type="number" step="0.1" class="form-control" value="30" required></div>
+        <div class="col-sm-6"><label class="form-label" for="humidity">Humidity (%)</label>
+          <input id="humidity" name="humidity" type="number" min="0" max="100" step="0.1" class="form-control" value="60" required></div>
+        <div class="col-sm-6"><label class="form-label" for="special_event">Special event?</label>
+          <select id="special_event" name="special_event" class="form-select"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="col-sm-6"><label class="form-label" for="previous_waste_kg">Previous waste (kg)</label>
+          <input id="previous_waste_kg" name="previous_waste_kg" type="number" min="0" step="0.1" class="form-control" value="10" required></div>
+        <div class="col-12"><label class="form-label" for="hours_to_expiry">Hours until the food expires</label>
+          <input id="hours_to_expiry" name="hours_to_expiry" type="number" min="0" step="0.5" class="form-control" value="6" required></div>
+        <div class="col-12"><button class="btn btn-success w-100" id="predict-btn" {% if not bundle %}disabled{% endif %}>Predict</button></div>
+      </form>
+    </div></div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card mb-4"><div class="card-body">
+      <h2 class="h5 mb-3">Result</h2>
+      <div id="result-empty" class="text-muted">Enter the kitchen details and press Predict.</div>
+      <div id="result-error" class="alert alert-danger d-none mb-0"></div>
+      <div id="result-box" class="d-none">
+        <p class="mb-2" id="result-summary"></p>
+        <p class="mb-2" id="result-reason"></p>
+        <div class="alert alert-warning py-2 d-none" id="result-warning"></div>
+        <p class="mb-2 d-none" id="result-ngo"></p>
+        <a class="btn btn-outline-success d-none" id="result-donate" href="#">Register this donation</a>
+      </div>
+    </div></div>
+
+    {% if bundle %}
+    <div class="card"><div class="card-body">
+      <h2 class="h5 mb-3">Model comparison</h2>
+      <table class="table table-sm mb-2">
+        <thead><tr><th>Model</th><th>MAE (kg)</th><th>R&sup2;</th></tr></thead>
+        <tbody>
+        {% for name, m in bundle.metrics.items() %}
+          <tr {% if name == bundle.model_name %}class="table-success"{% endif %}>
+            <td>{{ name }}{% if name == bundle.model_name %} <span class="badge text-bg-success">in use</span>{% endif %}</td>
+            <td>{{ m.MAE }}</td><td>{{ m.R2 }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <div class="small text-muted">
+        Risk: Low &lt; {{ rules.low|int }} kg, Medium {{ rules.low|int }}&ndash;{{ rules.medium|int }} kg, High &gt; {{ rules.medium|int }} kg.
+        Donate if at least {{ rules.min_kg|round(1) }} kg and {{ rules.min_hours|round(1) }} h of shelf life remain.
+        Demo logic only, not a real food-safety assessment.</div>
+    </div></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-6"><div class="card h-100"><div class="card-body">
+    <h2 class="h6">Average waste by weekday (training data)</h2><div class="chart-box"><canvas id="chart-weekday"></canvas></div></div></div></div>
+  <div class="col-md-6"><div class="card h-100"><div class="card-body">
+    <h2 class="h6">Your recent predictions (kg)</h2>
+    {% if chart_data.history_values %}<div class="chart-box"><canvas id="chart-history"></canvas></div>
+    {% else %}<p class="text-muted small mb-0">No predictions yet. This chart fills in as you predict.</p>{% endif %}</div></div></div>
+  <div class="col-md-6"><div class="card h-100"><div class="card-body">
+    <h2 class="h6">What drives waste (feature importance)</h2><div class="chart-box"><canvas id="chart-importance"></canvas></div></div></div></div>
+  <div class="col-md-6"><div class="card h-100"><div class="card-body">
+    <h2 class="h6">Donations by status</h2>
+    {% if stats.donations %}<div class="chart-box"><canvas id="chart-status"></canvas></div>
+    {% else %}<p class="text-muted small mb-0">No donations yet.</p>{% endif %}</div></div></div>
+</div>
+
+<div class="card"><div class="card-body">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h5 mb-0">Recent donations</h2><a href="{{ url_for('donate') }}" class="btn btn-sm btn-outline-success">All donations</a></div>
+  {% if recent %}
+  <div class="table-responsive"><table class="table align-middle mb-0">
+    <thead><tr><th>ID</th><th>Donor</th><th>Food</th><th>Kg</th><th>NGO</th><th>Status</th></tr></thead>
+    <tbody>{% for d in recent %}
+      <tr><td><a href="{{ url_for('donation_detail', code=d.donation_code) }}">{{ d.donation_code }}</a></td>
+        <td>{{ d.donor }}</td><td>{{ d.food_type }}</td><td>{{ d.quantity }}</td><td>{{ d.ngo }}</td>
+        <td><span class="badge text-bg-{{ 'success' if d.status == 'Delivered' else 'info' if d.status == 'Picked Up' else 'secondary' }}">{{ d.status }}</span></td></tr>
+    {% endfor %}</tbody></table></div>
+  {% else %}<p class="text-muted mb-0">No donations recorded yet.</p>{% endif %}
+</div></div>
+
+<script id="page-data" type="application/json">{{ chart_data | tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

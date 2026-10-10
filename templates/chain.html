@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Blockchain{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Blockchain</h1>
+<div class="alert alert-{{ 'success' if verdict.valid else 'danger' }}">
+  <strong>{{ 'Blockchain Valid' if verdict.valid else 'Blockchain Tampered' }}.</strong> {{ verdict.message }}</div>
+
+<div class="card mb-4"><div class="card-body">
+  <div class="d-flex flex-wrap gap-2 align-items-center">
+    <a href="{{ url_for('verify') }}" class="btn btn-success">Verify chain</a>
+    <form method="post" action="{{ url_for('tamper') }}" class="d-flex gap-2 align-items-center ms-md-3">
+      <input name="index" type="number" min="1" placeholder="Block #" class="form-control" style="width:100px" aria-label="Block number">
+      <button class="btn btn-outline-danger">Demo Tamper Test</button>
+    </form>
+    <form method="post" action="{{ url_for('restore') }}"><button class="btn btn-outline-primary">Restore original</button></form>
+    <form method="post" action="{{ url_for('reset') }}" class="ms-md-auto" onsubmit="return confirm('Delete all donations and start a fresh chain?')">
+      <button class="btn btn-outline-secondary">Reset demo data</button></form>
+  </div>
+  <div class="small text-muted mt-2">The Demo Tamper Test edits a stored block (default: the latest) without updating its hash, so Verify can detect it. Leave the box empty to tamper with the latest block.</div>
+</div></div>
+
+<div class="chain">
+{% for b in blocks %}
+  {% set chk = checks.get(b.index) %}
+  {% set ok = chk and chk.hash_ok and chk.link_ok %}
+  <div class="card block-card mb-3 {{ '' if ok else 'border-danger border-2' }}" id="block-{{ b.index }}">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start">
+        <div><strong>Block #{{ b.index }}</strong> <span class="text-muted small">{{ b.timestamp }}</span></div>
+        <span class="badge text-bg-{{ 'success' if ok else 'danger' }}">{{ 'OK' if ok else 'INVALID' }}</span>
+      </div>
+      <div class="my-2">
+        {% if b.data.event == 'GENESIS' %}
+          <span class="badge text-bg-dark">Genesis</span> {{ b.data.note }}
+        {% elif b.data.donation_code %}
+          <span class="badge text-bg-secondary">{{ b.data.status }}</span>
+          <a class="fw-bold" href="{{ url_for('donation_detail', code=b.data.donation_code) }}">{{ b.data.donation_code }}</a> &middot; {{ b.data.food_type }} &middot; {{ b.data.quantity_kg }} kg &middot; {{ b.data.ngo }}
+          <span class="text-muted small">(donor ref {{ b.data.donor_ref }})</span>
+        {% else %}<code>{{ b.data }}</code>{% endif %}
+      </div>
+      <div class="hash">hash: {{ b.hash }}</div>
+      <div class="hash text-muted">previous: {{ b.previous_hash }}</div>
+      {% if chk and not chk.hash_ok %}<div class="small text-danger mt-1">Stored hash does not match the block contents.</div>{% endif %}
+      {% if chk and not chk.link_ok %}<div class="small text-danger mt-1">Link to the previous block is broken.</div>{% endif %}
+    </div>
+  </div>
+  {% if not loop.last %}<div class="chain-link" aria-hidden="true">&#8595;</div>{% endif %}
+{% endfor %}
+</div>
+{% endblock %}
