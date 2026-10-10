@@ -1,45 +1,64 @@
+{% set nav = [
+  ('Primary workspace', [('Overview', 'overview', 'overview', ['overview']), ('Waste Prediction', 'index', 'predict', ['index'])]),
+  ('Donation management', [('Donations', 'donations', 'donations', ['donations', 'donate', 'donation_detail']), ('Track Donation', 'track', 'track', ['track', 'track_detail'])]),
+  ('Trust and verification', [('Verify Donation', 'verify', 'verify', ['verify']), ('Trust & Records', 'chain_view', 'records', ['chain_view'])]),
+] %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Food Waste Prediction &amp; Donation Traceability{% endblock %}</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta name="color-scheme" content="dark">
+  <title>{% block title %}FoodTrace{% endblock %} &middot; FoodTrace</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23248653'/%3E%3Cpath d='M9 22c0-8 4-12 14-12 0 9-4 13-12 13' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E">
   <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+  <script>try { if (localStorage.getItem('ft-sb') === '1') document.documentElement.classList.add('sb-collapsed'); } catch (e) {}</script>
 </head>
 <body>
-<nav class="navbar navbar-expand-md navbar-dark app-nav mb-4">
-  <div class="container">
-    <a class="navbar-brand fw-semibold" href="{{ url_for('index') }}">Food Waste &amp; Donation Trace</a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
-      <span class="navbar-toggler-icon"></span></button>
-    <div class="collapse navbar-collapse" id="nav">
-      <div class="navbar-nav ms-auto">
-        <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">Dashboard</a>
-        <a class="nav-link {% if request.endpoint in ('donate', 'donation_detail') %}active{% endif %}" href="{{ url_for('donate') }}">Donations</a>
-        <a class="nav-link {% if request.endpoint == 'chain_view' %}active{% endif %}" href="{{ url_for('chain_view') }}">Blockchain</a>
-        <a class="nav-link {% if request.endpoint == 'verify' %}active{% endif %}" href="{{ url_for('verify') }}">Verify</a>
-        <a class="nav-link" href="{{ url_for('status') }}">Status</a>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <a class="brand" href="{{ url_for('index') }}" title="FoodTrace">
+      <span class="brand-mark">{{ icon('leaf') }}</span><span class="label">FoodTrace</span></a>
+    <nav>
+      {% for title, items in nav %}
+      <div class="nav-section">
+        <div class="nav-title">{{ title }}</div>
+        {% for text, endpoint, ic, active_on in items %}
+        <a class="nav-link" href="{{ url_for(endpoint) }}" title="{{ text }}" aria-label="{{ text }}"
+           {% if request.endpoint in active_on %}aria-current="page"{% endif %}>{{ icon(ic) }}<span class="label">{{ text }}</span></a>
+        {% endfor %}
       </div>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-foot">
+      <a class="nav-link" href="{{ url_for('model_info') }}" title="Model information" aria-label="Model information"
+         {% if request.endpoint == 'model_info' %}aria-current="page"{% endif %}>{{ icon('model') }}<span class="label">Model information</span></a>
+      <a class="nav-link" href="{{ url_for('status') }}" title="System status" aria-label="System status"
+         {% if request.endpoint == 'status' %}aria-current="page"{% endif %}>{{ icon('status') }}<span class="label">System status</span></a>
+      <button class="nav-link sb-toggle" id="sb-toggle" type="button" title="Collapse or expand sidebar" aria-label="Collapse or expand sidebar" aria-expanded="true">
+        <span class="chev">{{ icon('chev') }}</span><span class="label">Collapse</span></button>
     </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+  <div class="main-wrap">
+    <header class="topbar">
+      <button class="icon-btn" id="nav-open" type="button" aria-label="Open navigation" aria-controls="sidebar">{{ icon('menu') }}</button>
+      <strong>FoodTrace</strong>
+    </header>
+    <main class="content" id="main">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="alert {{ category }}" role="{{ 'alert' if category in ('danger', 'warning') else 'status' }}"><span>{{ message }}</span>
+            <button class="x" type="button" aria-label="Dismiss" data-dismiss>&times;</button></div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="footer">Academic demo project. Predictions come from a model trained on synthetic data, the blockchain is a single-computer educational simulation, and food-safety rules are simplified.</footer>
   </div>
-</nav>
-
-<main class="container pb-5">
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}
-      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">{{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>
-    {% endfor %}
-  {% endwith %}
-  {% block content %}{% endblock %}
-</main>
-
-<footer class="text-center text-muted small pb-4">
-  Academic demo project. The blockchain is an educational simulation and food-safety rules are simplified.
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</div>
+<script src="{{ url_for('static', filename='js/shell.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

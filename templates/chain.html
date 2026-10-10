@@ -1,50 +1,56 @@
 {% extends "base.html" %}
-{% block title %}Blockchain{% endblock %}
+{% block title %}Trust &amp; Records{% endblock %}
 {% block content %}
-<h1 class="h3 mb-3">Blockchain</h1>
-<div class="alert alert-{{ 'success' if verdict.valid else 'danger' }}">
-  <strong>{{ 'Blockchain Valid' if verdict.valid else 'Blockchain Tampered' }}.</strong> {{ verdict.message }}</div>
+<div class="page-head"><div><h1>Trust &amp; Records</h1>
+  <p>Every donation event is written to a record book that makes later edits easy to spot.</p></div>
+  <a class="btn btn-ghost" href="{{ url_for('verify') }}">{{ icon('verify') }} Verify a donation</a></div>
 
-<div class="card mb-4"><div class="card-body">
-  <div class="d-flex flex-wrap gap-2 align-items-center">
-    <a href="{{ url_for('verify') }}" class="btn btn-success">Verify chain</a>
-    <form method="post" action="{{ url_for('tamper') }}" class="d-flex gap-2 align-items-center ms-md-3">
-      <input name="index" type="number" min="1" placeholder="Block #" class="form-control" style="width:100px" aria-label="Block number">
-      <button class="btn btn-outline-danger">Demo Tamper Test</button>
-    </form>
-    <form method="post" action="{{ url_for('restore') }}"><button class="btn btn-outline-primary">Restore original</button></form>
-    <form method="post" action="{{ url_for('reset') }}" class="ms-md-auto" onsubmit="return confirm('Delete all donations and start a fresh chain?')">
-      <button class="btn btn-outline-secondary">Reset demo data</button></form>
-  </div>
-  <div class="small text-muted mt-2">The Demo Tamper Test edits a stored block (default: the latest) without updating its hash, so Verify can detect it. Leave the box empty to tamper with the latest block.</div>
-</div></div>
+<div class="verdict {{ 'ok' if verdict.valid else 'bad' }}" role="status">
+  <span class="mark">{{ icon('verify' if verdict.valid else 'alert') }}</span>
+  <div><h2>{{ 'All records intact' if verdict.valid else 'Tampering detected' }}</h2><p class="muted" style="margin:2px 0 0">{{ verdict.message }}</p></div></div>
 
-<div class="chain">
-{% for b in blocks %}
-  {% set chk = checks.get(b.index) %}
-  {% set ok = chk and chk.hash_ok and chk.link_ok %}
-  <div class="card block-card mb-3 {{ '' if ok else 'border-danger border-2' }}" id="block-{{ b.index }}">
-    <div class="card-body">
-      <div class="d-flex justify-content-between align-items-start">
-        <div><strong>Block #{{ b.index }}</strong> <span class="text-muted small">{{ b.timestamp }}</span></div>
-        <span class="badge text-bg-{{ 'success' if ok else 'danger' }}">{{ 'OK' if ok else 'INVALID' }}</span>
-      </div>
-      <div class="my-2">
-        {% if b.data.event == 'GENESIS' %}
-          <span class="badge text-bg-dark">Genesis</span> {{ b.data.note }}
-        {% elif b.data.donation_code %}
-          <span class="badge text-bg-secondary">{{ b.data.status }}</span>
-          <a class="fw-bold" href="{{ url_for('donation_detail', code=b.data.donation_code) }}">{{ b.data.donation_code }}</a> &middot; {{ b.data.food_type }} &middot; {{ b.data.quantity_kg }} kg &middot; {{ b.data.ngo }}
-          <span class="text-muted small">(donor ref {{ b.data.donor_ref }})</span>
-        {% else %}<code>{{ b.data }}</code>{% endif %}
-      </div>
-      <div class="hash">hash: {{ b.hash }}</div>
-      <div class="hash text-muted">previous: {{ b.previous_hash }}</div>
-      {% if chk and not chk.hash_ok %}<div class="small text-danger mt-1">Stored hash does not match the block contents.</div>{% endif %}
-      {% if chk and not chk.link_ok %}<div class="small text-danger mt-1">Link to the previous block is broken.</div>{% endif %}
-    </div>
-  </div>
-  {% if not loop.last %}<div class="chain-link" aria-hidden="true">&#8595;</div>{% endif %}
-{% endfor %}
+<div class="grid cols-2" style="margin-top:18px">
+  <div class="card"><h2>How it works</h2>
+    <p class="lead">Each record gets a fingerprint (a SHA-256 hash) made from its contents and the previous record's fingerprint. Changing any past record changes its fingerprint, which no longer matches the next record, so the edit is exposed.</p></div>
+  <div class="card"><h2>What it does not do</h2>
+    <p class="lead">This is a learning simulation on one computer: no network, no mining, no consensus. It <strong>detects</strong> edits to individual records but cannot <strong>prevent</strong> someone with full database access from rewriting the whole book.</p></div>
 </div>
+
+<div class="card" style="margin-top:18px"><h2>Records ({{ blocks|length }})</h2>
+  <p class="lead">Newest last. Open "Advanced details" to see fingerprints and the stored data.</p>
+  {% for b in blocks %}
+  {% set chk = checks.get(b.index) %}{% set ok = chk and chk.hash_ok and chk.link_ok %}
+  <div class="record {{ '' if ok else 'bad' }}" id="block-{{ b.index }}">
+    <div class="row between"><div><strong>Record #{{ b.index }}</strong> <span class="small muted">{{ b.timestamp.replace('T', ' ') }}</span></div>
+      <span class="badge {{ 'ok' if ok else 'bad' }}">{{ 'Intact' if ok else 'Altered' }}</span></div>
+    <div style="margin:8px 0">
+      {% if b.data.event == 'GENESIS' %}<span class="badge">Start</span> The record book was started.
+      {% elif b.data.donation_code %}
+        {% set label = status_info[b.data.status].label if b.data.status in status_info else b.data.status %}
+        <span class="badge info">{{ label }}</span>
+        <a href="{{ url_for('track_detail', code=b.data.donation_code) }}"><strong>{{ b.data.donation_code }}</strong></a>
+        <span class="muted">&middot; {{ b.data.food_type }} &middot; {{ b.data.quantity_kg }} kg &middot; {{ b.data.ngo }}</span>
+      {% else %}<span class="muted">Unreadable record</span>{% endif %}
+    </div>
+    {% if chk and not chk.hash_ok %}<div class="small" style="color:var(--danger)">Contents no longer match this record's fingerprint.</div>{% endif %}
+    {% if chk and not chk.link_ok %}<div class="small" style="color:var(--danger)">Link to the previous record is broken.</div>{% endif %}
+    <details class="adv" style="margin-top:8px"><summary>Advanced details</summary><div class="body">
+      <div class="small faint">Fingerprint (hash)</div><div class="hash">{{ b.hash }}</div>
+      <div class="small faint" style="margin-top:6px">Previous fingerprint</div><div class="hash">{{ b.previous_hash }}</div>
+      <div class="small faint" style="margin-top:6px">Stored data</div><div class="hash">{{ b.data }}</div></div></details>
+  </div>
+  {% endfor %}
+</div>
+
+{% if operator %}
+<details class="adv" style="margin-top:18px"><summary>Demo tools (for presentations)</summary><div class="body">
+  <p class="small muted">The tamper test edits a stored record directly, without updating its fingerprint, exactly as an attacker would. Run Verify afterwards to see it caught. Restore undoes it.</p>
+  <div class="row">
+    <form method="post" action="{{ url_for('tamper') }}" class="row" data-once>
+      <input class="input" name="index" type="number" min="1" placeholder="Record # (default: latest)" aria-label="Record number to tamper with" style="width:210px">
+      <button class="btn btn-danger" type="submit">Demo tamper test</button></form>
+    <form method="post" action="{{ url_for('restore') }}"><button class="btn btn-ghost" type="submit">Restore original</button></form>
+    <form method="post" action="{{ url_for('reset') }}" data-confirm="Delete all donations and start a fresh record book?"><button class="btn btn-ghost" type="submit">{{ icon('trash') }} Reset demo data</button></form>
+  </div></div></details>
+{% endif %}
 {% endblock %}

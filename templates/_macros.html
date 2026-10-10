@@ -1,0 +1,30 @@
+{% macro status_badge(status) -%}
+{%- set cls = {'Delivered':'ok','Accepted':'info','Picked Up':'info','In Transit':'info','Pending':'','Cancelled':'warn','Rejected':'bad','Failed':'bad'}[status] -%}
+<span class="badge {{ cls }}">{{ status_info[status].label if status in status_info else status }}</span>
+{%- endmacro %}
+
+{% macro timeline(steps) %}
+<ol class="timeline" aria-label="Donation progress">
+{% for s in steps %}
+  <li class="tl-step {{ s.state }}" {% if s.state in ('current','exception') %}aria-current="step"{% endif %}>
+    <span class="tl-dot">{% if s.state == 'done' %}{{ icon('check') }}{% elif s.state == 'exception' %}{{ icon('x') }}{% elif s.state == 'current' %}{{ icon('clock') }}{% else %}{{ icon('box') }}{% endif %}</span>
+    <div>
+      <div class="tl-title">{{ s.label }}
+        {% if s.state == 'current' %}<span class="badge ok">Current step</span>{% elif s.state == 'exception' %}<span class="badge bad">Needs attention</span>{% endif %}</div>
+      <div class="tl-time">{% if s.time %}{{ s.time.replace('T', ' ') }}{% else %}Not reached yet{% endif %} &middot; {{ s.actor }}</div>
+      <div class="tl-text">{{ s.text }}</div>
+      {% if s.note %}<div class="tl-note">Note: {{ s.note }}</div>{% endif %}
+    </div>
+  </li>
+{% endfor %}
+</ol>
+{% endmacro %}
+
+{% macro verdict_card(state, message) %}
+{% set cls = 'ok' if state == 'verified' else ('warn' if state == 'chain_issue' else 'bad') %}
+<div class="verdict {{ cls }}" role="status">
+  <span class="mark">{{ icon('verify' if state == 'verified' else 'alert') }}</span>
+  <div><h2>{% if state == 'verified' %}Verified{% elif state == 'chain_issue' %}Verified, with a warning elsewhere{% elif state == 'not_found' %}Not found{% else %}Possible tampering detected{% endif %}</h2>
+  <p class="muted" style="margin:2px 0 0">{{ message }}</p></div>
+</div>
+{% endmacro %}

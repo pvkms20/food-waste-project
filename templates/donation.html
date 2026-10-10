@@ -1,45 +1,62 @@
 {% extends "base.html" %}
+{% from "_macros.html" import status_badge, timeline, verdict_card with context %}
 {% block title %}{{ donation.donation_code }}{% endblock %}
 {% block content %}
-<h1 class="h3 mb-4">Donation {{ donation.donation_code }}</h1>
-<div class="row g-4">
-  <div class="col-lg-4">
-    <div class="card text-center"><div class="card-body">
-      {% if qr_available %}
-        <img src="{{ url_for('qr_image', code=donation.donation_code) }}" class="img-fluid my-2" style="max-width:200px" alt="QR code for this donation">
-        <div class="small text-muted mb-3">Scan to open this traceability page</div>
-      {% else %}
-        <div class="small text-muted mb-3">QR codes are unavailable (qrcode package not installed).</div>
-      {% endif %}
-      <div class="alert alert-{{ 'success' if verdict.valid else 'danger' }} small mb-0 text-start">
-        <strong>{{ 'Blockchain valid' if verdict.valid else 'Blockchain tampered' }}.</strong> {{ verdict.message }}</div>
-    </div></div>
-  </div>
-  <div class="col-lg-8">
-    <div class="card mb-4"><div class="card-body">
-      <h2 class="h5 mb-3">Details</h2>
-      <table class="table table-sm mb-3">
-        <tr><th scope="row">Donor</th><td>{{ donation.donor }}</td></tr>
-        <tr><th scope="row">Food type</th><td>{{ donation.food_type }}</td></tr>
-        <tr><th scope="row">Quantity</th><td>{{ donation.quantity }} kg</td></tr>
-        <tr><th scope="row">Expiry</th><td>{{ donation.expiry }}</td></tr>
-        <tr><th scope="row">Receiver NGO</th><td>{{ donation.ngo }}</td></tr>
-        <tr><th scope="row">Status</th><td><strong>{{ donation.status }}</strong></td></tr>
-      </table>
-      {% if flow.get(donation.status) %}
-      <form method="post" action="{{ url_for('update_status', code=donation.donation_code) }}">
-        <button class="btn btn-success">Mark {{ flow[donation.status] }}</button></form>{% endif %}
-    </div></div>
-    <div class="card"><div class="card-body">
-      <h2 class="h5 mb-3">Traceability trail (from the blockchain)</h2>
-      {% for b in history %}
-        <div class="trail-item">
-          <div><strong>{{ b.data.status }}</strong> <span class="text-muted small">Block #{{ b.index }} &middot; {{ b.timestamp }}</span></div>
-          <div class="hash">hash: {{ b.hash }}</div>
-          <div class="hash text-muted">previous: {{ b.previous_hash }}</div>
+<div class="page-head">
+  <div><h1>{{ donation.donation_code }} {{ status_badge(donation.status) }}</h1>
+    <p>{{ donation.food_type }} &middot; {{ '%g'|format(donation.quantity) }} kg &middot; {{ donation.ngo }}</p></div>
+  <div class="row"><a class="btn btn-ghost" href="{{ url_for('track_detail', code=donation.donation_code) }}">Public tracking page</a>
+    <a class="btn btn-ghost" href="{{ url_for('donations') }}">All donations</a></div>
+</div>
+
+<div class="grid side">
+  <div class="stack">
+    <div class="card"><h2>Delivery progress</h2><p class="lead">{{ donation.info.text }}</p>{{ timeline(steps) }}</div>
+
+    {% if operator %}
+    <div class="card"><h2>Update status</h2>
+      {% if next_statuses %}
+      <p class="lead">Each change is applied once and added to the blockchain as a new record.</p>
+      {% for s in next_statuses %}
+      <form method="post" action="{{ url_for('update_status', code=donation.donation_code) }}" data-once {% if s in ('Cancelled', 'Rejected', 'Failed') %}data-confirm="Mark this donation as {{ status_info[s].label }}? This cannot be undone."{% endif %}
+            style="padding:12px 0;border-top:1px solid var(--border)">
+        <input type="hidden" name="to" value="{{ s }}">
+        <div class="form-grid">
+          {% if s == 'Picked Up' %}<div><label for="c-{{ s }}">Quantity collected (kg)</label>
+            <input class="input" id="c-{{ s }}" name="collected_kg" type="number" step="0.1" min="0.1" max="{{ donation.quantity }}" placeholder="{{ '%g'|format(donation.quantity) }} (as offered)"></div>{% endif %}
+          {% if s == 'Delivered' %}<div><label for="d-{{ s }}">Quantity delivered (kg)</label>
+            <input class="input" id="d-{{ s }}" name="delivered_kg" type="number" step="0.1" min="0.1" max="{{ donation.collected_kg or donation.quantity }}" placeholder="{{ '%g'|format(donation.collected_kg or donation.quantity) }} (as collected)"></div>{% endif %}
+          <div {% if s not in ('Picked Up', 'Delivered') %}class="full"{% endif %}><label for="n-{{ s }}">Note (optional)</label>
+            <input class="input" id="n-{{ s }}" name="note" maxlength="200" placeholder="e.g. driver name, reason"></div>
         </div>
-      {% else %}<p class="text-muted mb-0">No blocks found for this donation.</p>{% endfor %}
-    </div></div>
+        <div style="margin-top:10px"><button class="btn {{ 'btn-primary' if s == flow.get(donation.status) else ('btn-danger' if s in ('Cancelled','Rejected','Failed') else 'btn-ghost') }}" type="submit">
+          <span class="spinner"></span>Mark as {{ status_info[s].label }}</button></div>
+      </form>
+      {% endfor %}
+      {% else %}<p class="lead" style="margin:0">This donation is finished. No further changes are possible.</p>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="stack">
+    <div class="card"><h2>Details</h2>
+      <dl class="kv" style="margin-top:12px">
+        <dt>Donor</dt><dd>{{ donation.donor }}</dd><dt>Food type</dt><dd>{{ donation.food_type }}</dd>
+        <dt>Offered</dt><dd>{{ '%g'|format(donation.quantity) }} kg</dd>
+        <dt>Collected</dt><dd>{% if donation.collected_kg is not none %}{{ '%g'|format(donation.collected_kg) }} kg{% else %}<span class="faint">Not collected yet</span>{% endif %}</dd>
+        <dt>Delivered</dt><dd>{% if donation.delivered_kg is not none %}{{ '%g'|format(donation.delivered_kg) }} kg{% else %}<span class="faint">Not delivered yet</span>{% endif %}</dd>
+        <dt>Safe until</dt><dd>{{ donation.expiry }}{% if donation.needs_attention and donation.status not in ('Failed','Rejected') %} <span class="badge warn">Passed</span>{% endif %}</dd>
+        <dt>Receiving NGO</dt><dd>{{ donation.ngo }}</dd><dt>Registered</dt><dd>{{ donation.created_at.replace('T', ' ') }}</dd></dl>
+    </div>
+    <div class="card" style="text-align:center"><h2>Scan to track</h2>
+      <p class="lead">Anyone can scan this to see progress and verify the record. It shows no donor name.</p>
+      {% if qr_available %}<div class="qr-box"><img src="{{ url_for('qr_image', code=donation.donation_code) }}" alt="QR code linking to the tracking page for {{ donation.donation_code }}" width="180" height="180"></div>
+        <p class="small muted" style="margin-top:10px;word-break:break-all">{{ track_link }}</p>
+        {% if qr_hint %}<div class="alert warning" style="text-align:left;margin-top:10px"><span class="small">{{ qr_hint }}</span></div>{% endif %}
+      {% else %}<p class="muted small">QR codes are unavailable because the qrcode package is not installed.</p>{% endif %}
+    </div>
+    {{ verdict_card(verification.state, verification.message) }}
+    <a class="small" href="{{ url_for('verify', code=donation.donation_code) }}">See every check</a>
   </div>
 </div>
 {% endblock %}

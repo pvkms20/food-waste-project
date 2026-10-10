@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Waste Prediction{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Food Waste Prediction</h1>
+    <p>Enter today's service details to estimate how much food will go to waste, and what to do with the edible part.</p>
+  </div>
+  {% if bundle %}<a class="badge" href="{{ url_for('model_info') }}">Model: {{ bundle.model_name }} &middot; trained on {{ bundle.data_source }}</a>{% endif %}
+</div>
+
+{% if not bundle %}
+<div class="alert danger" role="alert"><span>The prediction model has not been trained yet. Run <code>python train_model.py</code> and restart the app.</span></div>
+{% endif %}
+
+<form id="predict-form" class="card" novalidate {% if not bundle %}aria-disabled="true"{% endif %}>
+  <fieldset>
+    <legend>Today's service</legend>
+    <div class="legend-hint">What the kitchen prepared and served.</div>
+    <div class="form-grid">
+      <div><label for="meals_served">Meals served</label>
+        <input class="input" id="meals_served" name="meals_served" type="number" inputmode="numeric" min="1" max="100000" step="1" required value="300" aria-describedby="h-meals e-meals">
+        <div class="hint" id="h-meals">Number of plates or portions served.</div><div class="field-error" id="e-meals" role="alert"></div></div>
+      <div><label for="food_prepared_kg">Food prepared</label>
+        <div class="input-suffix"><input class="input" id="food_prepared_kg" name="food_prepared_kg" type="number" inputmode="decimal" min="0.1" max="100000" step="0.1" required value="140" aria-describedby="h-prep e-prep"><span>kg</span></div>
+        <div class="hint" id="h-prep">Total cooked weight, before serving.</div><div class="field-error" id="e-prep" role="alert"></div></div>
+      <div><label for="kitchen_staff">Kitchen staff</label>
+        <input class="input" id="kitchen_staff" name="kitchen_staff" type="number" inputmode="numeric" min="1" max="1000" step="1" required value="8" aria-describedby="e-staff">
+        <div class="field-error" id="e-staff" role="alert"></div></div>
+      <div><label for="day_of_week">Day of week</label>
+        <select class="input" id="day_of_week" name="day_of_week">{% for d in days %}<option value="{{ loop.index0 }}" {% if loop.index0 == 5 %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
+      <div class="full"><div class="toggle-row"><input type="checkbox" id="special_event" name="special_event" value="1" checked>
+        <label for="special_event" style="margin:0">Special event or festival today</label></div></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Conditions and history</legend>
+    <div class="legend-hint">Weather affects spoilage; recent waste shows how this kitchen has been doing.</div>
+    <div class="form-grid">
+      <div><label for="temperature">Temperature</label>
+        <div class="input-suffix"><input class="input" id="temperature" name="temperature" type="number" inputmode="decimal" min="-30" max="60" step="0.1" required value="33" aria-describedby="e-temp"><span>&deg;C</span></div>
+        <div class="field-error" id="e-temp" role="alert"></div></div>
+      <div><label for="humidity">Humidity</label>
+        <div class="input-suffix"><input class="input" id="humidity" name="humidity" type="number" inputmode="decimal" min="0" max="100" step="0.1" required value="70" aria-describedby="e-hum"><span>%</span></div>
+        <div class="field-error" id="e-hum" role="alert"></div></div>
+      <div class="full"><label for="previous_waste_kg">Waste at the previous service</label>
+        <div class="input-suffix"><input class="input" id="previous_waste_kg" name="previous_waste_kg" type="number" inputmode="decimal" min="0" max="100000" step="0.1" required value="12" aria-describedby="e-prev"><span>kg</span></div>
+        <div class="field-error" id="e-prev" role="alert"></div></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Donation settings</legend>
+    <div class="legend-hint">The model predicts waste. It cannot judge whether food is still safe, so you decide how much of it is.</div>
+    <div class="form-grid">
+      <div><label for="edible_percent">Share still safe to donate</label>
+        <div class="input-suffix"><input class="input" id="edible_percent" name="edible_percent" type="number" inputmode="decimal" min="0" max="100" step="1" value="100" aria-describedby="h-edible e-edible"><span>%</span></div>
+        <div class="hint" id="h-edible">Your own judgement of the surplus that is still fresh and covered.</div><div class="field-error" id="e-edible" role="alert"></div></div>
+      <div><label for="hours_to_expiry">Safe shelf life left</label>
+        <div class="input-suffix"><input class="input" id="hours_to_expiry" name="hours_to_expiry" type="number" inputmode="decimal" min="0" max="720" step="0.5" value="6" aria-describedby="h-hours e-hours"><span>hours</span></div>
+        <div class="hint" id="h-hours">Donation needs at least {{ '%g'|format(rules.min_hours) }} hours.</div><div class="field-error" id="e-hours" role="alert"></div></div>
+    </div>
+  </fieldset>
+
+  <div class="row between">
+    <div class="alert danger" id="form-error" role="alert" hidden style="margin:0;flex:1 1 280px"><span></span></div>
+    <button class="btn btn-primary" id="predict-btn" type="submit" style="margin-left:auto" {% if not bundle %}disabled{% endif %}>
+      <span class="spinner" aria-hidden="true"></span><span id="predict-btn-text">Predict waste</span></button>
+  </div>
+</form>
+
+<section id="result" class="result" hidden aria-live="polite" aria-labelledby="result-title" tabindex="-1">
+  <div class="card">
+    <h2 id="result-title">Result</h2>
+    <p class="lead" id="result-lead"></p>
+
+    <div class="decision" id="decision"><span class="mark" id="decision-mark"></span>
+      <div><h3 id="decision-title"></h3><div class="muted small" id="decision-reason"></div></div></div>
+
+    <div class="alert warning" id="input-warnings" hidden role="alert"><span></span></div>
+
+    <div class="grid cols-3">
+      <div class="qty main"><div class="k">Predicted waste</div><div class="v"><span id="q-waste">0</span> <small>kg</small></div>
+        <div class="range-bar" id="range-bar" hidden><span class="band" id="range-band"></span><span class="dot" id="range-dot"></span></div>
+        <div class="d" id="q-waste-note"></div></div>
+      <div class="qty"><div class="k">Estimated edible surplus</div><div class="v"><span id="q-edible">0</span> <small>kg</small></div>
+        <div class="d" id="q-edible-note"></div></div>
+      <div class="qty"><div class="k">Suggested to offer</div><div class="v"><span id="q-offer">0</span> <small>kg</small></div>
+        <div class="d" id="q-offer-note"></div></div>
+    </div>
+
+    <div class="row" style="margin-top:18px">
+      <span class="badge" id="risk-badge"></span>
+      <a class="btn btn-primary" id="donate-link" href="{{ url_for('donate') }}" hidden>{{ icon('plus') }} Create donation from this</a>
+    </div>
+
+    <details class="adv" style="margin-top:18px"><summary>How to read these numbers</summary>
+      <div class="body small muted">
+        <p><strong>Predicted waste</strong> is the model's estimate of food that will be left over. The shaded bar is a {{ 90 }}% range based on the model's past errors, so the real figure will usually fall inside it.</p>
+        <p><strong>Estimated edible surplus</strong> is the predicted waste multiplied by the share you said is still safe. <strong>Suggested to offer</strong> is that surplus, limited by the capacity of the matched NGO.</p>
+        <p>Risk bands: low under {{ '%g'|format(rules.low) }} kg, medium up to {{ '%g'|format(rules.medium) }} kg, high above. The quantities actually offered, collected and delivered are recorded later on the donation itself.</p>
+      </div></details>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/app.js') }}"></script>{% endblock %}

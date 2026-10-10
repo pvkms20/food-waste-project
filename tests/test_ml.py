@@ -62,14 +62,61 @@ def test_missing_values_and_event_text_are_handled(tmp_path):
     train_model.train(path, tmp_path / "m.pkl")  # NaN temperatures must not crash training
 
 
-def test_training_evaluates_two_models_and_saves_best(trained):
+def test_training_compares_models_and_selects_by_cross_validation(trained):
     _, model_path, bundle = trained
     assert os.path.exists(model_path)
-    assert set(bundle["metrics"]) == {"Linear Regression", "Random Forest"}
+    assert set(bundle["metrics"]) == {"Linear Regression", "Random Forest", "Gradient Boosting"}
     for m in bundle["metrics"].values():
-        assert m["MAE"] > 0 and -1 <= m["R2"] <= 1
-    best = min(bundle["metrics"], key=lambda k: bundle["metrics"][k]["MAE"])
+        assert m["MAE"] > 0 and -1 <= m["R2"] <= 1 and m["RMSE"] >= m["MAE"] and m["CV_MAE"] > 0
+    # selection must NOT use the test set: the winner is the lowest cross-validated MAE
+    best = min(bundle["metrics"], key=lambda k: bundle["metrics"][k]["CV_MAE"])
     assert bundle["model_name"] == best
+    assert bundle["n_test"] == round(bundle["n_rows"] * 0.2) and bundle["n_train"] + bundle["n_test"] == bundle["n_rows"]
+
+
+def test_model_beats_naive_baselines(trained):
+    bundle = trained[2]
+    best_mae = bundle["metrics"][bundle["model_name"]]["MAE"]
+    assert all(best_mae < b["MAE"] for b in bundle["baselines"].values())
+
+
+def test_interval_is_calibrated_on_held_out_rows(trained):
+    iv = trained[2]["interval"]
+    assert iv["low_offset"] < 0 < iv["high_offset"]
+    assert 0.8 <= iv["test_coverage"] <= 0.98     # nominal 90%, checked on rows never used for fitting
+
+
+def test_prediction_interval_contains_prediction_and_is_clipped(trained):
+    bundle = trained[2]
+    low, high = ml.predict_interval(bundle, 1.0, 50.0)
+    assert 0 <= low <= 1.0 <= high <= 50.0
+    assert ml.predict_interval(bundle, 49.9, 50.0)[1] <= 50.0
+
+
+def test_out_of_range_inputs_get_a_warning(trained):
+    bundle = trained[2]
+    inside = ml.validate_inputs(VALID)
+    assert ml.input_warnings(bundle, inside) == []
+    far = dict(inside, meals_served=5000, food_prepared_kg=1750)
+    assert any("outside the range" in w for w in ml.input_warnings(bundle, far))
+
+
+def test_implausible_food_per_meal_is_rejected():
+    with pytest.raises(ml.InputError, match="per meal"):
+        ml.validate_inputs(dict(VALID, meals_served=10, food_prepared_kg=9000))
+    with pytest.raises(ml.InputError, match="per meal"):
+        ml.validate_inputs(dict(VALID, meals_served=50000, food_prepared_kg=1))
+
+
+@pytest.mark.parametrize("value,ok", [("", 100.0), ("50", 50.0), ("0", 0.0)])
+def test_edible_percent_parsing(value, ok):
+    assert ml.parse_edible_percent({"edible_percent": value}) == ok
+
+
+@pytest.mark.parametrize("value", ["-1", "101", "abc", "nan"])
+def test_edible_percent_rejects_bad_values(value):
+    with pytest.raises(ml.InputError):
+        ml.parse_edible_percent({"edible_percent": value})
 
 
 def test_saved_model_loads_and_predicts_a_number(trained):
@@ -82,9 +129,9 @@ def test_saved_model_loads_and_predicts_a_number(trained):
 def test_pipeline_includes_preprocessing(trained):
     _, model_path, _ = trained
     pipe = joblib.load(model_path)["pipeline"]
-    assert list(pipe.named_steps) == ["pre", "model"]
-    # day_of_week is one-hot encoded: 7 day columns + 6 numeric + 1 event
-    assert len(pipe.named_steps["pre"].get_feature_names_out()) == 14
+    assert list(pipe.named_steps) == ["features", "pre", "model"]
+    # day_of_week is one-hot encoded: 7 day columns + 6 numeric + prepared_per_meal + 1 event
+    assert len(pipe.named_steps["pre"].get_feature_names_out()) == 15
 
 
 def test_importances_cover_all_features(trained):

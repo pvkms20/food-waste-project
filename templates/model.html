@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Model information{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Model information</h1><p>Advanced. How the waste prediction model was built and how well it performs on data it never saw.</p></div></div>
+{% if not bundle %}
+<div class="card empty">{{ icon('model') }}<h3>No trained model found</h3><p>Run <code>python train_model.py</code> and restart the app.</p></div>
+{% else %}
+<div class="alert warning" role="note"><span><strong>Read this first.</strong> The model was trained on {{ bundle.data_source }} ({{ bundle.n_rows }} rows). The scores below show how well it learned that pattern, <em>not</em> how accurate it would be in a real kitchen. Retrain on real records for real use.</span></div>
+<div class="grid cols-3">
+  <div class="stat"><div class="k">Selected model</div><div class="v" style="font-size:1.35rem">{{ bundle.model_name }}</div><div class="d">{{ bundle.selection }}</div></div>
+  <div class="stat"><div class="k">Typical error (test MAE)</div><div class="v">{{ bundle.metrics[bundle.model_name].MAE }} <small>kg</small></div><div class="d">Average miss on {{ bundle.n_test }} held-out rows</div></div>
+  <div class="stat"><div class="k">Trained</div><div class="v" style="font-size:1.35rem">{{ bundle.trained_at.replace('T', ' ') }}</div><div class="d">{{ bundle.n_train }} training rows</div></div>
+</div>
+<div class="card" style="margin-top:18px"><h2>Model comparison</h2>
+  <p class="lead">MAE and RMSE are in kg (lower is better). R&sup2; closer to 1 is better. CV MAE is the cross-validated score on training data that decided the winner.</p>
+  <div class="table-wrap"><table class="table"><thead><tr><th>Model</th><th class="num">CV MAE</th><th class="num">Test MAE</th><th class="num">Test RMSE</th><th class="num">Test R&sup2;</th></tr></thead><tbody>
+  {% for name, m in bundle.metrics.items() %}<tr><td data-label="Model"><strong>{{ name }}</strong>{% if name == bundle.model_name %} <span class="badge ok">Selected</span>{% endif %}</td>
+    <td class="num" data-label="CV MAE">{{ m.CV_MAE if m.CV_MAE is defined else '-' }}</td><td class="num" data-label="Test MAE">{{ m.MAE }}</td><td class="num" data-label="RMSE">{{ m.RMSE if m.RMSE is defined else '-' }}</td><td class="num" data-label="R2">{{ m.R2 }}</td></tr>{% endfor %}
+  {% for name, m in (bundle.baselines or {}).items() %}<tr><td data-label="Model" class="muted">Baseline: {{ name }}</td><td class="num" data-label="CV MAE">-</td><td class="num" data-label="Test MAE">{{ m.MAE }}</td><td class="num" data-label="RMSE">{{ m.RMSE }}</td><td class="num" data-label="R2">{{ m.R2 }}</td></tr>{% endfor %}
+  </tbody></table></div></div>
+<div class="grid cols-2" style="margin-top:18px">
+  <div class="card"><h2>What drives the prediction</h2><p class="lead">{{ bundle.importance_note or 'Feature importance' }}. Larger means the model relies on it more.</p>
+    {% set top = bundle.importances.values()|max %}
+    {% for name, v in bundle.importances.items() %}<div style="margin:8px 0"><div class="row between small"><span>{{ name.replace('_', ' ') }}</span><span class="muted">{{ v }}</span></div>
+      <div class="progress"><i style="width: {{ ([v / top * 100, 0]|max)|round|int if top else 0 }}%"></i></div></div>{% endfor %}</div>
+  <div class="card"><h2>Prediction range</h2>
+    {% if bundle.interval %}<p class="lead">Each prediction shows a {{ (bundle.interval.level * 100)|int }}% range built from the model's past errors on training data (about {{ bundle.interval.low_offset }} to +{{ bundle.interval.high_offset }} kg around the estimate). On the held-out test rows the range actually contained the true value {{ (bundle.interval.test_coverage * 100)|round(1) }}% of the time.</p>{% endif %}
+    <h2 style="margin-top:14px">Limits</h2>
+    <p class="lead" style="margin-bottom:0">The model cannot extrapolate: inputs outside the training ranges trigger a warning and should not be trusted. It predicts waste, not food safety.</p></div>
+</div>
+<details class="adv" style="margin-top:18px"><summary>Training ranges the model has seen</summary><div class="body">
+  <div class="table-wrap"><table class="table"><thead><tr><th>Input</th><th class="num">Min</th><th class="num">Max</th></tr></thead><tbody>
+  {% for name, r in bundle.ranges.items() %}<tr><td data-label="Input">{{ name.replace('_', ' ') }}</td><td class="num" data-label="Min">{{ r.min }}</td><td class="num" data-label="Max">{{ r.max }}</td></tr>{% endfor %}</tbody></table></div></div></details>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}System status{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>System status</h1><p>A quick health check of the parts this app depends on.</p></div>
+  <span class="badge {{ 'ok' if h.status == 'ok' else 'warn' }}">{{ 'All systems working' if h.status == 'ok' else 'Degraded' }}</span></div>
+<div class="grid cols-2">
+  {% for title, ok, text in [
+    ('Database', h.database_available, (h.donations ~ ' donation(s) stored') if h.database_available else 'Cannot open the database'),
+    ('Prediction model', h.model_available, ('Loaded: ' ~ h.model_name) if h.model_available else 'Not found. Run python train_model.py'),
+    ('Blockchain records', h.blockchain_valid, h.blockchain_message ~ ' (' ~ h.blockchain_blocks ~ ' blocks)'),
+    ('QR codes', h.qr_available, 'Available' if h.qr_available else 'Install the qrcode package to enable QR codes')] %}
+  <div class="card"><div class="row"><span class="badge {{ 'ok' if ok else 'bad' }}">{{ 'OK' if ok else 'Problem' }}</span><h2>{{ title }}</h2></div>
+    <p class="muted" style="margin:8px 0 0">{{ text }}</p></div>{% endfor %}
+</div>
+<p class="small muted" style="margin-top:16px">Programs can read the same data as JSON from <code>/status?format=json</code>.</p>
+{% endblock %}

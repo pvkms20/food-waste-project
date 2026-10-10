@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge with context %}
+{% block title %}Donations{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Donations</h1><p>Every registered donation, newest first.</p></div>
+  {% if operator %}<a class="btn btn-primary" href="{{ url_for('donate') }}">{{ icon('plus') }} New donation</a>{% endif %}
+</div>
+<div class="card">
+  <form class="toolbar" method="get" action="{{ url_for('donations') }}" role="search">
+    <div class="grow"><label class="sr-only" for="q">Search donations</label>
+      <input class="input" id="q" name="q" type="search" maxlength="80" placeholder="Search reference, donor, food or NGO" value="{{ q }}"></div>
+    <div><label class="sr-only" for="status">Filter by status</label>
+      <select class="input" id="status" name="status"><option value="">All statuses</option>
+        {% for s in statuses %}<option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ status_info[s].label }}</option>{% endfor %}</select></div>
+    <button class="btn btn-ghost" type="submit">{{ icon('search') }} Search</button>
+    {% if q or status %}<a class="btn btn-ghost" href="{{ url_for('donations') }}">Clear</a>{% endif %}
+  </form>
+  {% if donations %}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Reference</th><th>Food type</th><th class="num">Quantity</th><th>Donor</th><th>Recipient NGO</th><th>Status</th><th>Last update</th><th><span class="sr-only">Action</span></th></tr></thead>
+    <tbody>{% for d in donations %}<tr>
+      <td data-label="Reference"><a href="{{ url_for('donation_detail', code=d.donation_code) }}"><strong>{{ d.donation_code }}</strong></a></td>
+      <td data-label="Food type">{{ d.food_type }}</td>
+      <td class="num" data-label="Quantity">{{ '%g'|format(d.quantity) }} kg</td>
+      <td data-label="Donor">{{ d.donor }}</td><td data-label="Recipient NGO">{{ d.ngo }}</td>
+      <td data-label="Status">{{ status_badge(d.status) }}{% if d.needs_attention %} <span class="badge warn">Attention</span>{% endif %}</td>
+      <td data-label="Last update" class="muted small">{{ d.updated_at.replace('T', ' ') }}</td>
+      <td><a class="btn btn-ghost btn-sm" href="{{ url_for('donation_detail', code=d.donation_code) }}">Track donation</a></td></tr>{% endfor %}</tbody></table></div>
+  {% elif total == 0 %}
+  <div class="empty">{{ icon('inbox') }}<h3>No donations yet</h3><p>Registered donations will appear here.</p>
+    {% if operator %}<a class="btn btn-primary" href="{{ url_for('donate') }}">Create the first donation</a>{% endif %}</div>
+  {% else %}
+  <div class="empty">{{ icon('search') }}<h3>No donations match</h3><p>Try a different search or clear the filter.</p><a class="btn btn-ghost" href="{{ url_for('donations') }}">Clear filters</a></div>
+  {% endif %}
+</div>
+{% endblock %}

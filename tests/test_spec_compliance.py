@@ -10,7 +10,7 @@ import pytest
 import config
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PY_SOURCES = ["app.py", "blockchain.py", "ml.py", "train_model.py", "decision.py", "config.py"]
+PY_SOURCES = ["app.py", "blockchain.py", "ml.py", "train_model.py", "decision.py", "config.py", "tracking.py", "features.py", "icons.py"]
 
 
 def read(name):
@@ -22,7 +22,7 @@ def read(name):
 @pytest.mark.parametrize("path", [
     "app.py", "train_model.py", "blockchain.py", "decision.py", "requirements.txt", "README.md",
     "data/waste_data.csv", "model/model.pkl",
-    "templates/index.html", "templates/donate.html", "templates/chain.html",
+    "templates/predict.html", "templates/donate.html", "templates/chain.html",
     "static/css/style.css", "static/js/app.js",
     "tests/test_blockchain.py", "tests/test_decision.py", "tests/test_app.py",
 ])
@@ -57,10 +57,10 @@ def test_dataset_has_exactly_the_required_columns():
 
 def test_saved_model_compares_both_models_and_keeps_the_best():
     bundle = joblib.load(config.MODEL_PATH)
-    assert set(bundle["metrics"]) == {"Linear Regression", "Random Forest"}
+    assert set(bundle["metrics"]) == {"Linear Regression", "Random Forest", "Gradient Boosting"}
     for m in bundle["metrics"].values():
-        assert {"MAE", "R2"} <= set(m)
-    assert bundle["model_name"] == min(bundle["metrics"], key=lambda k: bundle["metrics"][k]["MAE"])
+        assert {"MAE", "RMSE", "R2", "CV_MAE"} <= set(m)
+    assert bundle["model_name"] == min(bundle["metrics"], key=lambda k: bundle["metrics"][k]["CV_MAE"])
     assert type(bundle["pipeline"]).__name__ == "Pipeline"
 
 

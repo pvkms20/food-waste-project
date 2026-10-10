@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge, timeline, verdict_card with context %}
+{% block title %}Tracking {{ donation.donation_code }}{% endblock %}
+{% block content %}
+{% set happy = ['Pending','Accepted','Picked Up','In Transit','Delivered'] %}
+{% set pct = ((happy.index(donation.status) + 1) / 5 * 100)|int if donation.status in happy else 100 %}
+<div class="page-head">
+  <div><h1>{{ donation.donation_code }} {{ status_badge(donation.status) }}</h1><p>{{ donation.info.text }}</p></div>
+  <a class="btn btn-ghost no-print" href="{{ url_for('track') }}">Track another</a>
+</div>
+<div class="card" style="margin-bottom:18px">
+  <div class="row between"><strong>{{ donation.info.label }}</strong><span class="small muted">Last update {{ donation.updated_at.replace('T', ' ') }}</span></div>
+  <div class="progress" style="margin-top:10px" role="progressbar" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100" aria-label="Delivery progress"><i style="width: {{ pct }}%"></i></div>
+</div>
+<div class="grid side">
+  <div class="stack">
+    <div class="card"><h2>Delivery progress</h2>{{ timeline(steps) }}</div>
+  </div>
+  <div class="stack">
+    <div class="card"><h2>Details</h2>
+      <dl class="kv" style="margin-top:12px"><dt>Food</dt><dd>{{ donation.food_type }}</dd><dt>Offered</dt><dd>{{ '%g'|format(donation.quantity) }} kg</dd>
+        <dt>Collected</dt><dd>{% if donation.collected_kg is not none %}{{ '%g'|format(donation.collected_kg) }} kg{% else %}<span class="faint">Not yet</span>{% endif %}</dd>
+        <dt>Delivered</dt><dd>{% if donation.delivered_kg is not none %}{{ '%g'|format(donation.delivered_kg) }} kg{% else %}<span class="faint">Not yet</span>{% endif %}</dd>
+        <dt>Receiving NGO</dt><dd>{{ donation.ngo }}</dd><dt>Safe until</dt><dd>{{ donation.expiry }}</dd></dl>
+    </div>
+    {{ verdict_card(verification.state, verification.message) }}
+    <a class="small" href="{{ url_for('verify', code=donation.donation_code) }}">See how this was checked</a>
+  </div>
+</div>
+{% endblock %}

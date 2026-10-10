@@ -16,7 +16,8 @@ from http.cookiejar import CookieJar
 from pathlib import Path
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5000").rstrip("/")
-DB = Path(__file__).resolve().parent.parent / "database.db"
+import os
+DB = os.environ.get("FOOD_DB_PATH") or str(Path(__file__).resolve().parent.parent / "database.db")
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
 failures = []
 
@@ -58,17 +59,18 @@ check("2  database has genesis block only", db('SELECT COUNT(*) FROM blocks')[0]
 # 3. dashboard
 status, _, body = call("/")
 html = body.decode()
-check("3  dashboard loads with prediction form", status == 200 and 'id="predict-form"' in html)
-check("4  dashboard shows blockchain Valid", "Valid" in html)
+check("3  prediction screen loads with its form", status == 200 and 'id="predict-form"' in html)
+status, _, body = call("/overview")
+check("4  overview shows records verified", status == 200 and "No donations yet" in body.decode())
 
 # 5. prediction
 payload = dict(meals_served=300, food_prepared_kg=140, kitchen_staff=8, day_of_week=5, temperature=33,
                humidity=70, special_event=1, previous_waste_kg=12, hours_to_expiry=6)
 status, _, body = call("/predict", payload, as_json=True)
 pred = json.loads(body)
-check("5  /predict returns kg, risk, recommendation",
+check("5  /predict returns kg, interval, risk, recommendation",
       status == 200 and isinstance(pred["waste_kg"], float) and pred["risk"] in ("LOW", "MEDIUM", "HIGH")
-      and pred["decision"] == "DONATE", str(pred))
+      and pred["decision"] == "DONATE" and pred["interval"][0] <= pred["waste_kg"] <= pred["interval"][1], str(pred))
 print(f"      predicted {pred['waste_kg']} kg, risk {pred['risk']}, decision {pred['decision']}, NGO {pred['suggested_ngo']}")
 status, _, body = call("/predict", {**payload, "meals_served": -4}, as_json=True)
 check("6  invalid prediction input gives a clean 400", status == 400 and "error" in json.loads(body))
@@ -92,12 +94,22 @@ status, _, body = call("/verify?format=json")
 check("12 chain verifies as valid", json.loads(body)["valid"] is True)
 
 # 13. lifecycle
-call(f"/donation/{code}/status", {})
-call(f"/donation/{code}/status", {})
+status, _, _ = call(f"/donation/{code}/status?format=json", {"to": "Delivered"}, as_json=True)
+check("13a skipping steps is refused", status == 409)
+for step in ("Accepted", "Picked Up", "In Transit", "Delivered"):
+    call(f"/donation/{code}/status", {"to": step})
 check("13 status flow reaches Delivered", db("SELECT status FROM donations WHERE donation_code=?", (code,))[0][0] == "Delivered")
-check("14 each status change added a block", db('SELECT COUNT(*) FROM blocks')[0][0] == 4)
+check("14 each status change added a block and an event", db('SELECT COUNT(*) FROM blocks')[0][0] == 6
+      and db("SELECT COUNT(*) FROM donation_events WHERE donation_code=?", (code,))[0][0] == 5)
+status, _, _ = call(f"/donation/{code}/status?format=json", {"to": "Delivered"}, as_json=True)
+check("14a repeating a change is refused (no duplicate block)", status == 409 and db('SELECT COUNT(*) FROM blocks')[0][0] == 6)
 status, _, body = call(f"/qr/{code}.png")
 check("15 QR code PNG served", status == 200 and body[:4] == b"\x89PNG")
+status, _, body = call(f"/track/{code}")
+page = body.decode()
+check("15a public tracking page hides the donor", status == 200 and code in page and "E2E Hostel Mess" not in page)
+status, _, body = call(f"/verify?code={code}&format=json")
+check("15b donation verifies", json.loads(body)["donation"]["state"] == "verified")
 
 # 16. tamper
 call("/tamper", {"index": "1"})
@@ -105,8 +117,10 @@ status, _, body = call("/verify?format=json")
 verdict = json.loads(body)
 check("16 tampering is detected", verdict["valid"] is False and verdict["bad_index"] == 1, str(verdict))
 status, _, body = call("/verify")
-check("17 verify page says Tampered", "Blockchain Tampered" in body.decode())
-status, _, body = call("/status")
+check("17 verify page says tampering detected", "tampering detected" in body.decode().lower())
+status, _, body = call(f"/verify?code={code}&format=json")
+check("17a donation verification flags the tampering", json.loads(body)["donation"]["state"] == "tampered")
+status, _, body = call("/status?format=json")
 check("18 /status reports invalid chain", json.loads(body)["blockchain_valid"] is False)
 
 # 19. restore
@@ -114,10 +128,10 @@ call("/restore", {})
 status, _, body = call("/verify?format=json")
 check("19 restore makes the chain valid again", json.loads(body)["valid"] is True)
 
-status, _, body = call("/status")
+status, _, body = call("/status?format=json")
 info = json.loads(body)
 check("20 /status healthy", info["status"] == "ok" and info["model_available"] and info["donations"] == 1
-      and info["blockchain_blocks"] == 4, str(info))
+      and info["blockchain_blocks"] == 6, str(info))
 status, _, body = call("/does-not-exist")
 check("21 404 page has no stack trace", status == 404 and "Traceback" not in body.decode())
 

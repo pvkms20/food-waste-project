@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge with context %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Overview</h1><p>What is happening with donations right now. Every figure comes from records saved in this system.</p></div>
+  {% if operator %}<a class="btn btn-primary" href="{{ url_for('donate') }}">{{ icon('plus') }} New donation</a>{% endif %}
+</div>
+
+{% if stats.donations == 0 %}
+<div class="card empty">
+  {{ icon('inbox') }}<h3>No donations yet</h3>
+  <p>Run a prediction, then create a donation from the result. Totals and progress will appear here.</p>
+  <div class="row" style="justify-content:center"><a class="btn btn-primary" href="{{ url_for('index') }}">Run a prediction</a>
+  {% if operator %}<a class="btn btn-ghost" href="{{ url_for('donate') }}">Create a donation</a>{% endif %}</div>
+</div>
+{% else %}
+<div class="grid cols-4">
+  <div class="stat"><div class="k">Total food offered</div><div class="v">{{ '%g'|format(stats.donated_kg) }} <small>kg</small></div><div class="d">{{ stats.donations }} donation{{ '' if stats.donations == 1 else 's' }} registered</div></div>
+  <div class="stat"><div class="k">Awaiting pickup</div><div class="v">{{ stats.awaiting_pickup }}</div><div class="d">Registered or accepted, not yet collected</div></div>
+  <div class="stat"><div class="k">In transit</div><div class="v">{{ stats.in_transit }}</div><div class="d">Picked up or on the way</div></div>
+  <div class="stat"><div class="k">Completed deliveries</div><div class="v">{{ stats.delivered }}</div><div class="d">{{ '%g'|format(stats.delivered_kg) }} kg delivered</div></div>
+</div>
+{% endif %}
+
+<div class="grid side" style="margin-top:18px">
+  <div class="stack">
+    <div class="card">
+      <div class="row between"><h2>Needs attention</h2>{% if stats.attention %}<span class="badge warn">{{ stats.attention }}</span>{% endif %}</div>
+      {% if attention %}
+      <p class="lead">Failed or rejected donations, and active ones past their food expiry time.</p>
+      {% for d in attention %}
+      <div class="row between" style="padding:10px 0;border-top:1px solid var(--border)">
+        <div><a href="{{ url_for('donation_detail', code=d.donation_code) }}"><strong>{{ d.donation_code }}</strong></a>
+          <div class="small muted">{{ d.food_type }} &middot; {{ '%g'|format(d.quantity) }} kg &middot; {{ d.ngo }}</div></div>
+        {{ status_badge(d.status) }}</div>
+      {% endfor %}
+      {% else %}<p class="lead" style="margin:6px 0 0">Nothing needs attention.</p>{% endif %}
+    </div>
+
+    <div class="card">
+      <div class="row between"><h2>Recent donations</h2><a class="small" href="{{ url_for('donations') }}">View all</a></div>
+      {% if recent %}
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>Reference</th><th>Food</th><th class="num">Quantity</th><th>Status</th><th>Updated</th></tr></thead>
+        <tbody>{% for d in recent %}<tr>
+          <td data-label="Reference"><a href="{{ url_for('track_detail', code=d.donation_code) }}">{{ d.donation_code }}</a></td>
+          <td data-label="Food">{{ d.food_type }}</td><td class="num" data-label="Quantity">{{ '%g'|format(d.quantity) }} kg</td>
+          <td data-label="Status">{{ status_badge(d.status) }}</td><td data-label="Updated" class="muted small">{{ d.updated_at.replace('T', ' ') }}</td></tr>{% endfor %}</tbody></table></div>
+      {% else %}<p class="lead" style="margin:6px 0 0">No donations to show yet.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="verdict {{ 'ok' if verdict.valid else 'bad' }}">
+      <span class="mark">{{ icon('verify' if verdict.valid else 'alert') }}</span>
+      <div><h2>{{ 'Records verified' if verdict.valid else 'Tampering detected' }}</h2>
+        <p class="muted small" style="margin:2px 0 8px">{{ verdict.message }}</p>
+        <a class="small" href="{{ url_for('chain_view') }}">Open Trust &amp; Records</a></div>
+    </div>
+    <div class="card">
+      <h2>Predictions run</h2>
+      <p class="lead" style="margin-bottom:0">{{ stats.predictions }} saved{% if stats.predictions %}, totalling {{ '%g'|format(stats.predicted_kg) }} kg of predicted waste{% endif %}.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

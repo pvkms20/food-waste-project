@@ -1,30 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Verify blockchain{% endblock %}
+{% from "_macros.html" import verdict_card with context %}
+{% block title %}Verify Donation{% endblock %}
 {% block content %}
-<h1 class="h3 mb-3">Blockchain verification</h1>
-<div class="card mb-4 border-{{ 'success' if verdict.valid else 'danger' }} border-2"><div class="card-body">
-  <div class="display-6 fw-semibold text-{{ 'success' if verdict.valid else 'danger' }}">
-    {{ 'Blockchain Valid' if verdict.valid else 'Blockchain Tampered' }}</div>
-  <p class="mb-0 mt-2">{{ verdict.message }}</p>
-</div></div>
+<div class="page-head"><div><h1>Verify Donation</h1>
+  <p>Check that a donation's history matches the tamper-evident record. Nothing here is assumed: every check is recomputed when you open the page.</p></div></div>
 
-<div class="card mb-4"><div class="card-body">
-  <h2 class="h5 mb-3">How each block was checked</h2>
-  <div class="table-responsive"><table class="table table-sm align-middle mb-0">
-    <thead><tr><th>Block</th><th>Hash matches contents</th><th>Linked to previous block</th></tr></thead>
-    <tbody>{% for r in verdict.blocks %}
-      <tr><td>#{{ r.index }}</td>
-        <td><span class="badge text-bg-{{ 'success' if r.hash_ok else 'danger' }}">{{ 'Yes' if r.hash_ok else 'No' }}</span></td>
-        <td><span class="badge text-bg-{{ 'success' if r.link_ok else 'danger' }}">{{ 'Yes' if r.link_ok else 'No' }}</span></td></tr>
-    {% endfor %}</tbody></table></div>
-</div></div>
-
-<div class="d-flex flex-wrap gap-2">
-  <a class="btn btn-outline-success" href="{{ url_for('chain_view') }}">View blockchain</a>
-  {% if not verdict.valid %}
-  <form method="post" action="{{ url_for('restore') }}"><button class="btn btn-outline-primary">Restore original (undo demo tamper)</button></form>
-  {% endif %}
+<div class="card">
+  <form method="get" action="{{ url_for('verify') }}" class="toolbar" role="search">
+    <div class="grow"><label class="sr-only" for="code">Donation reference</label>
+      <input class="input" id="code" name="code" placeholder="DON-1A2B3C4D" maxlength="12" autocomplete="off" spellcheck="false" value="{{ code }}" {% if error %}aria-invalid="true" aria-describedby="code-err"{% endif %}></div>
+    <button class="btn btn-primary" type="submit">{{ icon('verify') }} Verify</button>
+  </form>
+  {% if error %}<div class="field-error" id="code-err" role="alert">{{ error }}</div>{% endif %}
 </div>
-<p class="text-muted small mt-3 mb-0">A block is valid when its SHA-256 hash is recomputed from its contents and matches the stored hash,
-  and its previous_hash equals the hash of the block before it.</p>
+
+{% if result %}
+<div style="margin-top:18px">{{ verdict_card(result.state, result.message) }}</div>
+{% if result.checks %}
+<div class="card" style="margin-top:18px"><h2>What was checked for {{ result.code }}</h2>
+  <ul class="checklist" style="margin-top:10px">{% for c in result.checks %}
+    <li><span class="{{ 'ok' if c.ok else 'bad' }}">{{ icon('check' if c.ok else 'x') }}</span><div><strong>{{ c.name }}</strong><div class="small muted">{{ c.detail }}</div></div></li>{% endfor %}</ul>
+  {% if result.state != 'not_found' %}<a class="small" href="{{ url_for('track_detail', code=result.code) }}">Open tracking page</a>{% endif %}
+</div>{% endif %}
+{% endif %}
+
+<div style="margin-top:18px" class="stack">
+  <div class="verdict {{ 'ok' if verdict.valid else 'bad' }}">
+    <span class="mark">{{ icon('verify' if verdict.valid else 'alert') }}</span>
+    <div><h2>Whole record book: {{ 'intact' if verdict.valid else 'tampering detected' }}</h2>
+      <p class="muted small" style="margin:2px 0 6px">{{ verdict.message }}</p><a class="small" href="{{ url_for('chain_view') }}">See Trust &amp; Records</a></div></div>
+  <details class="adv"><summary>Advanced: block-by-block checks</summary><div class="body">
+    <div class="table-wrap"><table class="table"><thead><tr><th>Block</th><th>Contents match fingerprint</th><th>Linked to previous</th></tr></thead>
+      <tbody>{% for r in verdict.blocks %}<tr><td data-label="Block">#{{ r.index }}</td>
+        <td data-label="Fingerprint"><span class="badge {{ 'ok' if r.hash_ok else 'bad' }}">{{ 'Yes' if r.hash_ok else 'No' }}</span></td>
+        <td data-label="Linked"><span class="badge {{ 'ok' if r.link_ok else 'bad' }}">{{ 'Yes' if r.link_ok else 'No' }}</span></td></tr>{% endfor %}</tbody></table></div>
+    <p class="small muted">A block is valid when its SHA-256 hash, recomputed from its contents, equals the stored hash, and its previous_hash equals the hash of the block before it.</p>
+    {% if not verdict.valid and operator %}<form method="post" action="{{ url_for('restore') }}"><button class="btn btn-ghost btn-sm" type="submit">Restore original (undo demo tamper)</button></form>{% endif %}
+  </div></details>
+</div>
 {% endblock %}

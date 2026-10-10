@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_badge with context %}
+{% block title %}Track Donation{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Track Donation</h1><p>Enter a donation reference to see where it is. You can also scan the QR code on a donation.</p></div></div>
+<div class="card">
+  <form method="get" action="{{ url_for('track') }}" class="toolbar" role="search">
+    <div class="grow"><label for="code" class="sr-only">Donation reference</label>
+      <input class="input" id="code" name="code" placeholder="DON-1A2B3C4D" maxlength="12" autocomplete="off" spellcheck="false" value="{{ code }}" {% if error %}aria-invalid="true" aria-describedby="code-err"{% endif %} required></div>
+    <button class="btn btn-primary" type="submit">{{ icon('search') }} Track</button>
+  </form>
+  {% if error %}<div class="field-error" id="code-err" role="alert">{{ error }}</div>{% endif %}
+</div>
+{% if recent %}
+<div class="card" style="margin-top:18px"><h2>Recent donations</h2>
+  {% for d in recent %}<div class="row between" style="padding:10px 0;border-top:1px solid var(--border)">
+    <div><a href="{{ url_for('track_detail', code=d.donation_code) }}"><strong>{{ d.donation_code }}</strong></a>
+      <div class="small muted">{{ d.food_type }} &middot; {{ '%g'|format(d.quantity) }} kg</div></div>{{ status_badge(d.status) }}</div>{% endfor %}
+</div>
+{% elif not error %}
+<div class="card empty" style="margin-top:18px">{{ icon('track') }}<h3>Nothing to track yet</h3><p>Donations appear here once they are registered.</p></div>
+{% endif %}
+{% endblock %}

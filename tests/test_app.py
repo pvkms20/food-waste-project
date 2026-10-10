@@ -43,10 +43,11 @@ def test_homepage_loads(client):
     html = resp.get_data(as_text=True)
     assert resp.status_code == 200
     assert "Food Waste Prediction" in html and 'id="predict-form"' in html
-    assert "Blockchain status" in html
+    assert "Chart" not in html and "chart-" not in html   # the old charts are gone
 
 
-@pytest.mark.parametrize("path", ["/", "/donate", "/chain", "/verify", "/status"])
+@pytest.mark.parametrize("path", ["/", "/overview", "/donations", "/donate", "/track", "/chain", "/verify",
+                                  "/model", "/status"])
 def test_pages_load_on_empty_database(client, path):
     assert client.get(path).status_code == 200
 
@@ -148,13 +149,13 @@ def test_donor_name_is_not_written_to_blockchain(client, appmod):
 def test_donation_detail_page_shows_trail(client):
     code = create_donation(client)
     html = client.get(f"/donation/{code}").get_data(as_text=True)
-    assert code in html and "Traceability trail" in html and "Block #1" in html
+    assert code in html and "Delivery progress" in html and "Registered" in html
 
 
 def test_chain_page_shows_donation_block(client):
     code = create_donation(client)
     html = client.get("/chain").get_data(as_text=True)
-    assert code in html and "Block #0" in html and "Block #1" in html
+    assert code in html and "Record #0" in html and "Record #1" in html
 
 
 def test_auto_ngo_matching(appmod):
@@ -192,10 +193,11 @@ def test_form_values_are_kept_after_validation_error(client):
 
 def test_user_content_is_html_escaped(client):
     code = create_donation(client, donor="<script>alert(1)</script>")
-    for url in ("/donate", f"/donation/{code}", "/"):
+    for url in ("/donations", f"/donation/{code}", "/overview", "/"):
         html = client.get(url).get_data(as_text=True)
         assert "<script>alert(1)</script>" not in html
-    assert "&lt;script&gt;" in client.get("/donate").get_data(as_text=True)
+    assert "&lt;script&gt;" in client.get("/donations").get_data(as_text=True)
+    assert "&lt;script&gt;" in client.get(f"/donation/{code}").get_data(as_text=True)
 
 
 def test_sql_injection_attempt_is_harmless(client, appmod):
@@ -205,9 +207,10 @@ def test_sql_injection_attempt_is_harmless(client, appmod):
 
 def test_status_flow_appends_blocks(client, appmod):
     code = create_donation(client)
-    for _ in range(3):  # third call is a no-op because it is already delivered
+    for _ in range(6):  # extra calls are no-ops once the donation is delivered
         client.post(f"/donation/{code}/status")
-    assert [b.data["status"] for b in appmod.chain.donation_history(code)] == ["Pending", "Picked Up", "Delivered"]
+    assert [b.data["status"] for b in appmod.chain.donation_history(code)] == [
+        "Pending", "Accepted", "Picked Up", "In Transit", "Delivered"]
     assert db_rows(appmod, "SELECT status FROM donations")[0]["status"] == "Delivered"
     assert appmod.chain.is_valid()
 
@@ -235,7 +238,7 @@ def test_app_works_without_qrcode_package(client, appmod, monkeypatch):
 # ---------------- blockchain verification ----------------
 def test_verify_page_and_json(client):
     create_donation(client)
-    assert "Blockchain Valid" in client.get("/verify").get_data(as_text=True)
+    assert "intact" in client.get("/verify").get_data(as_text=True)
     data = client.get("/verify?format=json").get_json()
     assert data["valid"] is True and len(data["blocks"]) == 2
 
@@ -244,13 +247,13 @@ def test_tamper_is_detected_and_restore_fixes_it(client):
     create_donation(client)
     client.post("/tamper", data={"index": "1"})
     page = client.get("/verify").get_data(as_text=True)
-    assert "Blockchain Tampered" in page and "Block 1 was modified" in page
+    assert "tampering detected" in page and "Block 1 was modified" in page
     assert client.get("/verify?format=json").get_json()["valid"] is False
-    assert "INVALID" in client.get("/chain").get_data(as_text=True)
+    assert "Altered" in client.get("/chain").get_data(as_text=True)
 
     client.post("/restore")
     assert client.get("/verify?format=json").get_json()["valid"] is True
-    assert "Blockchain Valid" in client.get("/verify").get_data(as_text=True)
+    assert "intact" in client.get("/verify").get_data(as_text=True)
 
 
 def test_tamper_defaults_to_latest_block(client):
@@ -306,12 +309,13 @@ def test_status_endpoint(client):
 
 def test_stats_reflect_delivery(client, appmod):
     code = create_donation(client, quantity_kg="20")
-    client.post(f"/donation/{code}/status")
-    client.post(f"/donation/{code}/status")
+    for _ in range(4):
+        client.post(f"/donation/{code}/status")
     stats = appmod.gather_stats()
     assert stats["donations"] == 1 and stats["donated_kg"] == 20 and stats["delivered_kg"] == 20
     assert stats["by_status"] == {"Delivered": 1}
-    assert client.get("/").status_code == 200  # dashboard renders charts data with donations present
+    assert stats["delivered"] == 1 and stats["awaiting_pickup"] == 0 and stats["attention"] == 0
+    assert client.get("/overview").status_code == 200  # overview renders with donations present
 
 
 def test_ngos_are_seeded(appmod):
@@ -323,7 +327,7 @@ def test_unexpected_error_shows_friendly_500_page(client, appmod, monkeypatch):
     def boom():
         raise RuntimeError("secret internal detail")
     monkeypatch.setattr(appmod, "gather_stats", boom)
-    resp = client.get("/")
+    resp = client.get("/overview")
     html = resp.get_data(as_text=True)
     assert resp.status_code == 500 and "Something went wrong" in html
     assert "secret internal detail" not in html and "Traceback" not in html
@@ -331,7 +335,7 @@ def test_unexpected_error_shows_friendly_500_page(client, appmod, monkeypatch):
 
 def test_chain_page_links_blocks_to_donation_pages(client):
     code = create_donation(client)
-    assert f'href="/donation/{code}"' in client.get("/chain").get_data(as_text=True)
+    assert f'href="/track/{code}"' in client.get("/chain").get_data(as_text=True)
 
 
 def test_auto_match_rejects_quantity_larger_than_every_ngo(client, appmod):
